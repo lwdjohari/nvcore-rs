@@ -1,0 +1,17 @@
+[package]
+name = "nvcore-rs"
+version = "0.1.0"
+authors = ["Linggawasistha Djohari <linggawasistha.djohari@outlook.com>"]
+edition = "2021"
+description = "nvcore for rust library"
+license = "Apache-2.0"
+repository = "https://github.com/lwdjohari/nvcore-rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4"
+
+[lib]
+name = "nvcore"
+path = "src/lib.rs"
