@@ -113,7 +113,7 @@ impl<T> Condition<T> {
             field_name,
             values: Some(parameter_values.clone()),
             where_subquery_parent: Some(parent),
-            subquery: Some(Arc::new(NvSelect::new_with_subquery(
+            subquery: Some(Arc::new(NvSelect::new_subquery_where(
                 parameter_values,
                 parent,
                 param_index,
@@ -164,7 +164,7 @@ impl<T> Condition<T> {
                     "{} {} ({})",
                     self.field_name,
                     self.operation,
-                    self.__generate_query_from_subquery(pretty_print)
+                    self.generate_query_from_subquery(pretty_print)
                 ));
                 if !self.table_alias.is_empty() {
                     ss.push_str(&format!(" AS {}", self.table_alias));
@@ -187,10 +187,13 @@ impl<T> Condition<T> {
         ss
     }
 
-    fn __generate_query_from_subquery(&self, pretty_print: bool) -> String {
-        // Placeholder for actual subquery generation logic
-        String::new()
+    pub fn generate_query_from_subquery(&self, pretty_print: bool) -> String {
+        match &self.subquery {
+            Some(subquery) => subquery.generate_query(pretty_print),
+            None => String::new(),
+        }
     }
+    
 
     fn determine_parameter_format(&self, index: u32) -> String {
         // Placeholder for actual parameter format logic

@@ -1,7 +1,5 @@
 [workspace]
-members = [
-    "nvcore-rs"
-]
+members = ["nvcore-rs", "nvcore-test"]
 
 # [package]
 # name = "nvcore-rs"

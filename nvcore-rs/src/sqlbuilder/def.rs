@@ -5,7 +5,7 @@ use std::fmt;
 use std::time::SystemTime;
 
 // Define DefaultPostgresParamType to support comprehensive PostgreSQL data types
-#[derive(Debug,PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DefaultPostgresParamType {
     SmallInt(i16),         // Small Int
     Int(i32),              // Integer
@@ -18,7 +18,7 @@ pub enum DefaultPostgresParamType {
 }
 
 // Define DefaultOracleParamType to support comprehensive Oracle data types
-#[derive(Debug,PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DefaultOracleParamType {
     Int(i32),       // Oracle NUMBER, INTEGER
     LongLong(i64),  // Oracle NUMBER (large integer)
@@ -38,7 +38,7 @@ pub trait ParameterType {}
 impl ParameterType for DefaultPostgresParamType {}
 impl ParameterType for DefaultOracleParamType {}
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq,Eq,Clone,Copy)]
 pub enum DatabaseDialect {
     PostgreSQL,
     Oracle,
@@ -52,7 +52,6 @@ impl fmt::Display for DatabaseDialect {
         }
     }
 }
-
 
 #[derive(Debug)]
 pub enum SortType {
@@ -113,7 +112,7 @@ impl fmt::Display for LogicOperator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SqlAggregateFunction {
     None,
     Distinct,
@@ -190,8 +189,6 @@ pub fn determine_parameter_format(dialect: &DatabaseDialect, parameter_index: u3
     }
 }
 
-
-
 // Function to convert SqlOperator to a string representation
 pub fn sql_operator_to_string(op: SqlOperator) -> String {
     match op {
@@ -221,13 +218,9 @@ pub fn generate_indentation(level: u32, indent_char: char, number_per_print: u32
     std::iter::repeat(indent_char).take(n).collect()
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    
 
     #[test]
     fn test_database_dialect_display() {

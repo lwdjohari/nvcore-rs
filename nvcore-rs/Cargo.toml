@@ -11,6 +11,7 @@ repository = "https://github.com/lwdjohari/nvcore-rs"
 
 [dependencies]
 chrono = "0.4"
+fluent_builder = "0.6.0"
 
 [lib]
 name = "nvcore"
