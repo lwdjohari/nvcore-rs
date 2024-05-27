@@ -73,8 +73,10 @@ impl<T> FromTableStatement<T> {
         table_name: &String,
         table_alias: &Option<String>,
     ) -> Arc<Self> {
+        {
         let mut write_guard = self.tables.write().unwrap();
         write_guard.push(FromTable::with_alias(table_name.clone(), table_alias.clone()));
+        }
         self.clone()
     }
 
@@ -82,9 +84,8 @@ impl<T> FromTableStatement<T> {
         *self.current_parameter_index.read().unwrap()
     }
 
-    pub fn update_current_param_index(self: Arc<Self>, param_index: u32) {
-        let mut index = self.current_parameter_index.write().unwrap();
-        *index = param_index;
+    pub fn update_current_parameter_index(&mut self, param_index: u32) {
+        *self.current_parameter_index.write().unwrap() = param_index;
     }
 
     // pub fn get_current_parameter_index_from_parent(&self, select: &NvSelect<T>) -> u32 {

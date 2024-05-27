@@ -186,7 +186,6 @@ impl<T> Condition<T> {
                     self.operation,
                     determine_parameter_format(&self.dialect, index)
                 ));
-                
             }
             ConditionMode::EndGroup => {
                 ss.push(')');
@@ -196,7 +195,7 @@ impl<T> Condition<T> {
     }
 
     pub fn generate_query_from_subquery(&self, pretty_print: bool) -> String {
-        let sq_guard  = self.subquery.read().unwrap();
+        let sq_guard = self.subquery.read().unwrap();
         if !sq_guard.is_some() {
             return String::new();
         }
@@ -251,7 +250,7 @@ impl<T> WhereStatement<T> {
         })
     }
 
-    pub fn update_current_parameter_index(self: Arc<Self>, parameter_index: u32) {
+    pub fn update_current_parameter_index(&mut self, parameter_index: u32) {
         *self.current_param_index.write().unwrap() = parameter_index;
     }
 
@@ -294,23 +293,26 @@ impl<T> WhereStatement<T> {
         op: &SqlOperator,
         value: T,
     ) -> Arc<Self> {
-        let condition: Arc<Condition<T>> = Condition::new_comparator(
-            field_name,
-            op,
-            1,
-            *self.current_param_index.read().unwrap(),
-            self.level + 1,
-            self.dialect,
-        );
+        {
+            let condition: Arc<Condition<T>> = Condition::new_comparator(
+                field_name,
+                op,
+                1,
+                *self.current_param_index.read().unwrap(),
+                self.level + 1,
+                self.dialect,
+            );
 
-        *self.current_param_index.write().unwrap() = condition.next_parameter_index();
-        self.conditions.write().unwrap().push(condition);
+            *self.current_param_index.write().unwrap() = condition.next_parameter_index();
+            self.conditions.write().unwrap().push(condition);
+        }
+        // {
+        //     let mut pvalues_guard = self.values.write().unwrap();
+        //     let pvalues_ref = Arc::get_mut(&mut pvalues_guard)
+        //         .unwrap();
 
-        let mut pvalues_guard = self.values.write().unwrap();
-        let pvalues_ref = Arc::get_mut(&mut pvalues_guard)
-            .expect("There should be no other references to the Arc at this point");
-
-        pvalues_ref.push(value);
+        //     pvalues_ref.push(value);
+        // }
         self.clone()
     }
 
@@ -391,7 +393,7 @@ impl<T> WhereStatement<T> {
         let param_index = self.current_param_index.read().unwrap().clone();
         let level = self.level + 1;
         let dialect = self.dialect;
-        
+
         let condition = Condition::new_subquery(
             self.values.read().unwrap().clone(),
             self.clone(),

@@ -6,17 +6,16 @@ use crate::sqlbuilder::{
 };
 
 use crate::utils::indent_space;
-use std::ops::DerefMut;
 use std::sync::{Arc, RwLock};
 
 pub struct NvSelect<T> {
     current_param_index: RwLock<u32>,
     // join_blocks: RwLock<Arc<Vec<JoinStatement<T>>>>,
-    from_table: RwLock<Option<Arc<FromTableStatement<T>>>>,
+    from_statement: RwLock<Option<Arc<FromTableStatement<T>>>>,
     fields: RwLock<Vec<FieldDef<T>>>,
     parameter_values: RwLock<Arc<Vec<T>>>,
     subquery_from_parent: RwLock<Option<Arc<FromTableStatement<T>>>>,
-    where_: RwLock<Option<Arc<WhereStatement<T>>>>,
+    where_statement: RwLock<Option<Arc<WhereStatement<T>>>>,
     // order_by: RwLock<Option<Arc<OrderByStatement<T>>>>,
     // group_by: RwLock<Option<Arc<GroupByStatement<T>>>>,
     subquery_where_parent: RwLock<Option<Arc<WhereStatement<T>>>>,
@@ -32,12 +31,12 @@ impl<T> NvSelect<T> {
             current_param_index: 1.into(),
             level: 0,
             // join_blocks: Arc::new(Vec::new()).into(),
-            from_table: None.into(),
+            from_statement: None.into(),
             fields: Vec::new().into(),
             parameter_values: Arc::new(Vec::new()).into(),
             subquery_from_parent: None.into(),
             table_alias: String::new(),
-            where_: None.into(),
+            where_statement: None.into(),
             // order_by: None.into(),
             // group_by: None.into(),
             subquery_where_parent: None.into(),
@@ -51,12 +50,12 @@ impl<T> NvSelect<T> {
             current_param_index: current_param_index.into(),
             level: 0,
             // join_blocks: Arc::new(Vec::new()).into(),
-            from_table: None.into(),
+            from_statement: None.into(),
             fields: Vec::new().into(),
             parameter_values: Arc::new(Vec::new()).into(),
             subquery_from_parent: None.into(),
             table_alias: String::new().into(),
-            where_: None.into(),
+            where_statement: None.into(),
             // order_by: None.into(),
             // group_by: None.into(),
             subquery_where_parent: None.into(),
@@ -75,12 +74,12 @@ impl<T> NvSelect<T> {
             current_param_index: current_param_index.into(),
             level,
             // join_blocks: Arc::new(Vec::new()).into(),
-            from_table: None.into(),
+            from_statement: None.into(),
             fields: Vec::new().into(),
             parameter_values: values.into(),
             subquery_from_parent: None.into(),
             table_alias: String::new(),
-            where_: None.into(),
+            where_statement: None.into(),
             // order_by: None.into(),
             // group_by: None.into(),
             subquery_where_parent: None.into(),
@@ -101,12 +100,12 @@ impl<T> NvSelect<T> {
             current_param_index: current_param_index.into(),
             level,
             // join_blocks: Arc::new(Vec::new()).into(),
-            from_table: None.into(),
+            from_statement: None.into(),
             fields: Vec::new().into(),
             parameter_values: values.into(),
             subquery_from_parent: Some(from_obj).into(),
             table_alias,
-            where_: None.into(),
+            where_statement: None.into(),
             // order_by: None.into(),
             // group_by: None.into(),
             subquery_where_parent: None.into(),
@@ -127,12 +126,12 @@ impl<T> NvSelect<T> {
             current_param_index: current_param_index.into(),
             level,
             // join_blocks: Arc::new(Vec::new()).into(),
-            from_table: None.into(),
+            from_statement: None.into(),
             fields: Vec::new().into(),
             parameter_values: values.into(),
             subquery_from_parent: None.into(),
             table_alias,
-            where_: None.into(),
+            where_statement: None.into(),
             // order_by: None.into(),
             // group_by: None.into(),
             subquery_where_parent: Some(where_obj).into(),
@@ -217,58 +216,109 @@ impl<T> NvSelect<T> {
     }
 
     pub fn end_subquery_inside_from(self: Arc<Self>) -> Arc<FromTableStatement<T>> {
-        let from_parent = self.subquery_from_parent.read().unwrap().is_some();
-        if !from_parent {
-            panic!("Call this only from .From().AddSubquery().EndFromSubquery()")
+        let mut from_parent_guard = self.subquery_from_parent.write().unwrap();
+
+        if from_parent_guard.is_none() {
+            panic!("Call this only from .From().AddSubquery().EndFromSubquery()");
         }
 
-        let mut from_parent_rw = self.subquery_from_parent.write().unwrap().unwrap();
-        from_parent_rw.update_current_param_index(*self.current_param_index.read().unwrap());
-        from_parent_rw.clone()
+        let p_index = *self.current_param_index.read().unwrap();
+
+        // Use as_mut to get a mutable reference inside the Option
+        if let Some(ref mut from_parent_rw) = *from_parent_guard {
+            Arc::get_mut(from_parent_rw)
+                .expect("There should not be any other mutable references here")
+                .update_current_parameter_index(p_index);
+        }
+
+        // Clone the Arc to return
+        Arc::clone(from_parent_guard.as_ref().unwrap())
     }
 
     pub fn end_subquery_inside_where_condition(self: Arc<Self>) -> Arc<WhereStatement<T>> {
-        let where_parent = self.subquery_where_parent.read().unwrap().is_some();
-        if !where_parent {
-            panic!("Call this only from .From().AddSubquery().EndFromSubquery()")
+        let mut where_parent_guard = self.subquery_where_parent.write().unwrap();
+
+        if where_parent_guard.is_none() {
+            panic!("Call this only from .From().AddSubquery().EndFromSubquery()");
         }
 
-        let mut where_parent_rw = self.subquery_where_parent.write().unwrap().unwrap();
-        // where_parent_rw.update_current_param_index(*self.current_param_index.read().unwrap());
-        where_parent_rw.clone()
+        let p_index = *self.current_param_index.read().unwrap();
+
+        // Use as_mut to get a mutable reference inside the Option
+        if let Some(ref mut where_parent_rw) = *where_parent_guard {
+            Arc::get_mut(where_parent_rw)
+                .expect("There should not be any other mutable references here")
+                .update_current_parameter_index(p_index);
+        }
+
+        // Clone the Arc to return
+        Arc::clone(where_parent_guard.as_ref().unwrap())
     }
 
     pub fn from(self: Arc<Self>) -> Arc<FromTableStatement<T>> {
-        let is_from_parent = self.from_table.read().unwrap().is_some();
+        {
+            let from_parent_guard = self.from_statement.write().unwrap();
 
-        if !is_from_parent {
-            *self.from_table.write().unwrap() = Some(FromTableStatement::new(
-                self.parameter_values.read().unwrap().clone(),
-                self,
-                self.current_param_index.read().unwrap().clone(),
-                self.level,
-                self.dialect,
-            ))
-            .into();
+            if let Some(ref from_parent_rw) = *from_parent_guard {
+                return Arc::clone(from_parent_rw);
+            }
         }
 
-        self.from_table.read().unwrap().unwrap().clone()
+        // The locks are dropped here, avoiding deadlock
+
+        let parameter_values = self.parameter_values.read().unwrap().clone();
+        let current_param_index = *self.current_param_index.read().unwrap();
+
+        let from = FromTableStatement::new(
+            parameter_values,
+            self.clone(),
+            current_param_index,
+            self.level,
+            self.dialect.clone(),
+        );
+
+        let from_clone = from.clone();
+
+        {
+            let mut from_parent_guard = self.from_statement.write().unwrap();
+            *from_parent_guard = Some(Arc::clone(&from_clone));
+        }
+
+        from_clone
     }
 
-    pub fn where_(self: Arc<Self>) -> Arc<WhereStatement<T>> {
-        let is_where_parent = self.where_.read().unwrap().is_some();
+    pub fn where_clause(self: Arc<Self>) -> Arc<WhereStatement<T>> {
 
-        if is_where_parent {
-            *self.where_.write().unwrap() = Some(WhereStatement::new_with_parent(
-                self.parameter_values.read().unwrap().clone(),
-                self,
-                self.current_param_index.read().unwrap().clone(),
-                self.level,
-                self.dialect,
-            ));
+        {
+            let where_parent_guard = self.where_statement.write().unwrap();
+
+            if let Some(ref where_parent_rw) = *where_parent_guard {
+                return Arc::clone(where_parent_rw);
+            }
         }
 
-        self.where_.read().unwrap().unwrap()
+        // The locks are dropped here, avoiding deadlock
+
+        // let parameter_values = self.parameter_values.read().unwrap().clone();
+        // let current_param_index = *self.current_param_index.read().unwrap();
+
+        let where_obj = WhereStatement::new_with_parent(
+            self.parameter_values.read().unwrap().clone(),
+            self.clone(),
+            self.current_param_index.read().unwrap().clone(),
+            self.level,
+            self.dialect,
+        );
+        let where_clone = where_obj.clone();
+
+        {
+            let mut where_parent_guard = self.where_statement.write().unwrap();
+            *where_parent_guard = Some(Arc::clone(&where_clone));
+        }
+
+        where_clone
+
+        
     }
 
     // pub fn join(&mut self) -> &mut JoinStatement<T> {
@@ -364,8 +414,8 @@ impl<T> NvSelect<T> {
         let mut query = String::new();
 
         let fields_guard = self.fields.read().unwrap();
-        let from_table_guard = self.from_table.read().unwrap();
-        let where_statement_guard = self.where_.read().unwrap();
+        let from_table_guard = self.from_statement.read().unwrap();
+        let where_statement_guard = self.where_statement.read().unwrap();
 
         // SELECT
         if pretty_print {

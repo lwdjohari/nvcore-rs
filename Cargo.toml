@@ -1,11 +1,12 @@
 [workspace]
 members = ["nvcore-rs", "nvcore-test"]
 
+resolver = "2"
 # [package]
 # name = "nvcore-rs"
 # version = "0.1.0"
 # authors = ["Linggawasistha Djohari <linggawasistha.djohari@outlook.com>"]
-# edition = "2021"
+#edition = "2021"
 # description = "nvcore for rust library"
 # license = "Apache-2.0"
 # repository = "https://github.com/lwdjohari/nvcore-rs"
