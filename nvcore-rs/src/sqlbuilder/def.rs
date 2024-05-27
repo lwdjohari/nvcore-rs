@@ -9,13 +9,32 @@ use std::time::SystemTime;
 pub enum DefaultPostgresParamType {
     SmallInt(i16),         // Small Int
     Int(i32),              // Integer
-    LongLong(i64),         // Bigint
+    BigInt(i64),         // Bigint
     Float(f32),            // Float
     Double(f64),           // Double
     String(String),        // Char, Varchar, NVarchar
     Bool(bool),            // Bool
     TimePoint(SystemTime), // Timestamp
 }
+
+impl fmt::Display for DefaultPostgresParamType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DefaultPostgresParamType::SmallInt(value) => write!(f, "{}", value),
+            DefaultPostgresParamType::Int(value) => write!(f, "{}", value),
+            DefaultPostgresParamType::BigInt(value) => write!(f, "{}", value),
+            DefaultPostgresParamType::Float(value) => write!(f, "{}", value),
+            DefaultPostgresParamType::Double(value) => write!(f, "{}", value),
+            DefaultPostgresParamType::String(value) => write!(f, "{}", value),
+            DefaultPostgresParamType::Bool(value) => write!(f, "{}", value),
+            DefaultPostgresParamType::TimePoint(value) => {
+                let duration = value.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+                write!(f, "{}", duration.as_secs())
+            },
+        }
+    }
+}
+
 
 // Define DefaultOracleParamType to support comprehensive Oracle data types
 #[derive(Debug, PartialEq, Clone)]
@@ -31,6 +50,7 @@ pub enum DefaultOracleParamType {
     // TIMESTAMP WITH LOCAL TIME ZONE
     RawBlob(Vec<u8>), // Oracle RAW, BLOB
 }
+
 
 // Define a trait for parameter types
 pub trait ParameterType {}

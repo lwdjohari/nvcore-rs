@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::sqlbuilder::{DatabaseDialect, SqlAggregateFunction};
-use std::sync::Arc ;
+use std::sync::{Arc, RwLock} ;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum FieldDefMode {
@@ -22,12 +22,12 @@ impl std::fmt::Display for FieldDefMode {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct FieldDef<T> {
     field: String,
     table_alias: Option<String>,
     static_param_values: Arc<Vec<String>>,
-    parameter_values: Arc<Vec<T>>,
+    parameter_values: Arc<RwLock<Vec<T>>>,
     fn_values: Arc<Vec<T>>,
     function_name: String,
     parameter_format: String,
@@ -56,7 +56,7 @@ impl<T> FieldDef<T> {
             field,
             table_alias,
             static_param_values: Arc::new(Vec::new()),
-            parameter_values: Arc::new(Vec::new()),
+            parameter_values: Arc::new(RwLock::new( Vec::new())),
             fn_values: Arc::new(Vec::new()),
             function_name: String::new(),
             parameter_format: String::new(),
@@ -82,7 +82,7 @@ impl<T> FieldDef<T> {
             field: String::new(),
             table_alias: None,
             static_param_values,
-            parameter_values: Arc::new(Vec::new()),
+            parameter_values: Arc::new(RwLock::new( Vec::new())),
             fn_values: Arc::new(Vec::new()),
             function_name,
             parameter_format: String::new(),
@@ -101,7 +101,7 @@ impl<T> FieldDef<T> {
         dialect: DatabaseDialect,
         function_name: String,
         parameter_format: String,
-        parameter_values: Arc<Vec<T>>,
+        parameter_values: Arc<RwLock<Vec<T>>>,
         fn_param_values: Arc<Vec<T>>,
         static_param_values: Arc<Vec<String>>,
         param_index: u32,
@@ -283,7 +283,7 @@ impl<T> FieldDef<T> {
         self.static_param_values.clone()
     }
 
-    pub fn values(&self) -> Arc<Vec<T>> {
+    pub fn values(&self) -> Arc<RwLock<Vec<T>>> {
         self.parameter_values.clone()
     }
 

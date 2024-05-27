@@ -27,7 +27,7 @@ impl std::fmt::Display for ConditionMode {
 
 pub struct Condition<T> {
     field_name: String,
-    values: Option<Arc<Vec<T>>>,
+    values: Arc<RwLock<Vec<T>>>,
     where_subquery_parent: RwLock<Option<Arc<WhereStatement<T>>>>,
     subquery: RwLock<Option<Arc<NvSelect<T>>>>,
     operation: SqlOperator,
@@ -61,7 +61,7 @@ impl<T> Condition<T> {
         let param_index = Self::process(param_index, op, value_size);
         Arc::new(Self {
             field_name: field_name.clone(),
-            values: None,
+            values: Arc::new(RwLock::new(Vec::new())),
             where_subquery_parent: None.into(),
             subquery: None.into(),
             operation: op.clone(),
@@ -84,7 +84,7 @@ impl<T> Condition<T> {
     ) -> Arc<Self> {
         Arc::new(Self {
             field_name: String::new(),
-            values: None.into(),
+            values: Arc::new(RwLock::new(Vec::new())),
             where_subquery_parent: None.into(),
             subquery: None.into(),
             operation: SqlOperator::Equal, // Placeholder
@@ -100,7 +100,7 @@ impl<T> Condition<T> {
     }
 
     pub fn new_subquery(
-        parameter_values: Arc<Vec<T>>,
+        parameter_values: Arc<RwLock<Vec<T>>>,
         parent: Arc<WhereStatement<T>>,
         field_name: String,
         subquery_name: String,
@@ -111,7 +111,7 @@ impl<T> Condition<T> {
     ) -> Arc<Self> {
         Arc::new(Self {
             field_name,
-            values: Some(parameter_values.clone()),
+            values: parameter_values.clone(),
             where_subquery_parent: Some(parent.clone()).into(),
             subquery: Some(NvSelect::new_subquery_where(
                 parameter_values,
@@ -165,7 +165,7 @@ impl<T> Condition<T> {
                 ss.push('(');
             }
             ConditionMode::LogicalOperator => {
-                ss.push_str(&format!("{}", self.logic_operator));
+                ss.push_str(&format!(" {} ", self.logic_operator));
             }
             ConditionMode::Subquery => {
                 ss.push_str(&format!(
@@ -214,7 +214,7 @@ impl<T> Condition<T> {
 
 pub struct WhereStatement<T> {
     parent: RwLock<Option<Arc<NvSelect<T>>>>,
-    values: RwLock<Arc<Vec<T>>>,
+    values: Arc<RwLock<Vec<T>>>,
     conditions: RwLock<Vec<Arc<Condition<T>>>>,
     level: u32,
     current_param_index: RwLock<u32>,
@@ -225,7 +225,7 @@ impl<T> WhereStatement<T> {
     pub fn new(dialect: DatabaseDialect) -> Arc<Self> {
         Arc::new(Self {
             parent: None.into(),
-            values: Arc::new(Vec::new()).into(),
+            values: Arc::new(RwLock::new(Vec::new())),
             conditions: Vec::new().into(),
             level: 0,
             current_param_index: 1.into(),
@@ -234,7 +234,7 @@ impl<T> WhereStatement<T> {
     }
 
     pub fn new_with_parent(
-        values: Arc<Vec<T>>,
+        values: Arc<RwLock<Vec<T>>>,
         parent: Arc<NvSelect<T>>,
         current_param_index: u32,
         level: u32,
@@ -242,7 +242,7 @@ impl<T> WhereStatement<T> {
     ) -> Arc<Self> {
         Arc::new(Self {
             parent: Some(parent).into(),
-            values: values.into(),
+            values: values,
             conditions: Vec::new().into(),
             level,
             current_param_index: current_param_index.into(),
@@ -258,18 +258,32 @@ impl<T> WhereStatement<T> {
         *self.current_param_index.read().unwrap()
     }
 
-    pub fn values(self: Arc<Self>) -> Arc<Vec<T>> {
-        self.values.read().unwrap().clone()
+    pub fn values(self: Arc<Self>) -> Arc<RwLock<Vec<T>>> {
+        self.values.clone()
     }
 
     pub fn end_where_block(self: Arc<Self>) -> Arc<NvSelect<T>> {
-        let parent_guard = self.parent.read().unwrap();
-        if parent_guard.is_none() {
-            panic!("EndWhereBlock() null-reference to parent");
-        }
+        {
+            let mut parent_guard = self.parent.write().unwrap();
 
-        // Cloning the Arc inside the Option
-        Arc::clone(parent_guard.as_ref().unwrap())
+            // Check if the Option is Some and get a mutable reference to the Arc<NvSelect<T>>
+            if let Some(ref mut arc) = *parent_guard {
+                // Use Arc::get_mut to get a mutable reference to NvSelect<T>
+                if let Some(inner_mut) = Arc::get_mut(arc) {
+                    inner_mut.update_current_param_index(*self.current_param_index.read().unwrap());
+                    println!("{}","update!");
+                }
+            }
+        }
+        {
+            let parent_guard = self.parent.read().unwrap();
+            if parent_guard.is_none() {
+                panic!("EndWhereBlock() null-reference to parent");
+            }
+
+            // Cloning the Arc inside the Option
+            Arc::clone(parent_guard.as_ref().unwrap())
+        }
     }
 
     pub fn generate_query(&self, pretty_print: bool, append_where_keyword: bool) -> String {
@@ -294,6 +308,11 @@ impl<T> WhereStatement<T> {
         value: T,
     ) -> Arc<Self> {
         {
+            let mut pvalues_guard = self.values.write().unwrap();
+            pvalues_guard.push(value);
+        }
+
+        {
             let condition: Arc<Condition<T>> = Condition::new_comparator(
                 field_name,
                 op,
@@ -306,13 +325,7 @@ impl<T> WhereStatement<T> {
             *self.current_param_index.write().unwrap() = condition.next_parameter_index();
             self.conditions.write().unwrap().push(condition);
         }
-        // {
-        //     let mut pvalues_guard = self.values.write().unwrap();
-        //     let pvalues_ref = Arc::get_mut(&mut pvalues_guard)
-        //         .unwrap();
 
-        //     pvalues_ref.push(value);
-        // }
         self.clone()
     }
 
@@ -322,24 +335,24 @@ impl<T> WhereStatement<T> {
         value1: T,
         value2: T,
     ) -> Arc<Self> {
-        let condition = Condition::new_comparator(
-            field_name,
-            &SqlOperator::Between,
-            2,
-            self.current_param_index.read().unwrap().clone(),
-            self.level + 1,
-            self.dialect,
-        );
+        {
+            let mut pvalues_guard = self.values.write().unwrap();
+            pvalues_guard.push(value1);
+            pvalues_guard.push(value2);
+        }
+        {
+            let condition = Condition::new_comparator(
+                field_name,
+                &SqlOperator::Between,
+                2,
+                self.current_param_index.read().unwrap().clone(),
+                self.level + 1,
+                self.dialect,
+            );
 
-        *self.current_param_index.write().unwrap() = condition.next_parameter_index();
-        self.conditions.write().unwrap().push(condition);
-
-        let mut pvalues_guard = self.values.write().unwrap();
-        let pvalues_ref = Arc::get_mut(&mut pvalues_guard)
-            .expect("There should be no other references to the Arc at this point");
-
-        pvalues_ref.push(value1);
-        pvalues_ref.push(value2);
+            *self.current_param_index.write().unwrap() = condition.next_parameter_index();
+            self.conditions.write().unwrap().push(condition);
+        }
 
         self.clone()
     }
@@ -395,7 +408,7 @@ impl<T> WhereStatement<T> {
         let dialect = self.dialect;
 
         let condition = Condition::new_subquery(
-            self.values.read().unwrap().clone(),
+            self.values.clone(),
             self.clone(),
             field_name,
             subquery_name,
@@ -416,25 +429,28 @@ impl<T> WhereStatement<T> {
 
 impl<T: Clone> WhereStatement<T> {
     pub fn add_condition_in(self: Arc<Self>, field_name: &String, values: &Vec<T>) -> Arc<Self> {
-        let size = values.len() as u32;
-        let condition = Condition::new_comparator(
-            field_name,
-            &SqlOperator::In,
-            size,
-            self.current_param_index.read().unwrap().clone(),
-            self.level + 1,
-            self.dialect.clone(),
-        );
-        *self.current_param_index.write().unwrap() = condition.next_parameter_index();
-        self.conditions.write().unwrap().push(condition);
+        {
+            let mut pvalues_guard = self.values.write().unwrap();
 
-        let mut pvalues_guard = self.values.write().unwrap();
-        let pvalues_ref = Arc::get_mut(&mut pvalues_guard)
-            .expect("There should be no other references to the Arc at this point");
-
-        for value in values {
-            pvalues_ref.push(value.clone());
+            for value in values {
+                pvalues_guard.push(value.clone());
+            }
         }
+        {
+            let size = values.len() as u32;
+
+            let condition = Condition::new_comparator(
+                field_name,
+                &SqlOperator::In,
+                size,
+                self.current_param_index.read().unwrap().clone(),
+                self.level + 1,
+                self.dialect.clone(),
+            );
+            *self.current_param_index.write().unwrap() = condition.next_parameter_index();
+            self.conditions.write().unwrap().push(condition);
+        }
+
         self.clone()
     }
 }

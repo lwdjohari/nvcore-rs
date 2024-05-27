@@ -37,7 +37,7 @@ pub struct FromTableStatement<T> {
     parent: RwLock<Option<Arc<NvSelect<T>>>>,
     tables: RwLock<Vec<FromTable>>,
     subqueries: RwLock<Vec<Arc<NvSelect<T>>>>,
-    parameter_values: RwLock<Arc<Vec<T>>>,
+    parameter_values: Arc<RwLock<Vec<T>>>,
     current_parameter_index: RwLock<u32>,
     level: u32,
     dialect: DatabaseDialect,
@@ -45,7 +45,7 @@ pub struct FromTableStatement<T> {
 
 impl<T> FromTableStatement<T> {
     pub fn new(
-        parameter_values: Arc<Vec<T>>,
+        parameter_values: Arc<RwLock<Vec<T>>>,
         parent: Arc<NvSelect<T>>,
         parameter_index: u32,
         level: u32,
@@ -55,7 +55,7 @@ impl<T> FromTableStatement<T> {
             parent: Some( parent).into(),
             tables: Vec::new().into(),
             subqueries: Vec::new().into(),
-            parameter_values:  parameter_values.into(),
+            parameter_values:  parameter_values,
             level: level,
             current_parameter_index: parameter_index.into(),
             dialect: dialect,
@@ -167,9 +167,9 @@ impl<T> FromTableStatement<T> {
     }
 
      fn create_new_select_block( self:Arc<Self>, index: u32, level: u32, table_alias: String)->Arc<NvSelect<T>> {
-        let read_guard = self.parameter_values.read().unwrap();
+        
         let subquery = NvSelect::new_subquery_from(
-            read_guard.clone(),
+            self.parameter_values.clone(),
             index,
             level,
             self.clone(),

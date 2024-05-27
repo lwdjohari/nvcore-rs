@@ -13,7 +13,7 @@ pub struct NvSelect<T> {
     // join_blocks: RwLock<Arc<Vec<JoinStatement<T>>>>,
     from_statement: RwLock<Option<Arc<FromTableStatement<T>>>>,
     fields: RwLock<Vec<FieldDef<T>>>,
-    parameter_values: RwLock<Arc<Vec<T>>>,
+    parameter_values: Arc<RwLock<Vec<T>>>,
     subquery_from_parent: RwLock<Option<Arc<FromTableStatement<T>>>>,
     where_statement: RwLock<Option<Arc<WhereStatement<T>>>>,
     // order_by: RwLock<Option<Arc<OrderByStatement<T>>>>,
@@ -28,12 +28,12 @@ pub struct NvSelect<T> {
 impl<T> NvSelect<T> {
     pub fn new(dialect: DatabaseDialect) -> Arc<Self> {
         Arc::new(Self {
-            current_param_index: 1.into(),
+            current_param_index: 0.into(),
             level: 0,
             // join_blocks: Arc::new(Vec::new()).into(),
             from_statement: None.into(),
             fields: Vec::new().into(),
-            parameter_values: Arc::new(Vec::new()).into(),
+            parameter_values: Arc::new(RwLock::new(Vec::new())),
             subquery_from_parent: None.into(),
             table_alias: String::new(),
             where_statement: None.into(),
@@ -52,7 +52,7 @@ impl<T> NvSelect<T> {
             // join_blocks: Arc::new(Vec::new()).into(),
             from_statement: None.into(),
             fields: Vec::new().into(),
-            parameter_values: Arc::new(Vec::new()).into(),
+            parameter_values: Arc::new(RwLock::new( Vec::new())),
             subquery_from_parent: None.into(),
             table_alias: String::new().into(),
             where_statement: None.into(),
@@ -65,7 +65,7 @@ impl<T> NvSelect<T> {
     }
 
     pub fn new_subquery(
-        values: Arc<Vec<T>>,
+        values: Arc<RwLock<Vec<T>>>,
         current_param_index: u32,
         level: u32,
         dialect: DatabaseDialect,
@@ -76,7 +76,7 @@ impl<T> NvSelect<T> {
             // join_blocks: Arc::new(Vec::new()).into(),
             from_statement: None.into(),
             fields: Vec::new().into(),
-            parameter_values: values.into(),
+            parameter_values: values,
             subquery_from_parent: None.into(),
             table_alias: String::new(),
             where_statement: None.into(),
@@ -89,7 +89,7 @@ impl<T> NvSelect<T> {
     }
 
     pub fn new_subquery_from(
-        values: Arc<Vec<T>>,
+        values: Arc<RwLock<Vec<T>>>,
         current_param_index: u32,
         level: u32,
         from_obj: Arc<FromTableStatement<T>>,
@@ -102,7 +102,7 @@ impl<T> NvSelect<T> {
             // join_blocks: Arc::new(Vec::new()).into(),
             from_statement: None.into(),
             fields: Vec::new().into(),
-            parameter_values: values.into(),
+            parameter_values: values,
             subquery_from_parent: Some(from_obj).into(),
             table_alias,
             where_statement: None.into(),
@@ -115,7 +115,7 @@ impl<T> NvSelect<T> {
     }
 
     pub fn new_subquery_where(
-        values: Arc<Vec<T>>,
+        values: Arc<RwLock<Vec<T>>>,
         where_obj: Arc<WhereStatement<T>>,
         current_param_index: u32,
         level: u32,
@@ -128,7 +128,7 @@ impl<T> NvSelect<T> {
             // join_blocks: Arc::new(Vec::new()).into(),
             from_statement: None.into(),
             fields: Vec::new().into(),
-            parameter_values: values.into(),
+            parameter_values: values,
             subquery_from_parent: None.into(),
             table_alias,
             where_statement: None.into(),
@@ -148,7 +148,7 @@ impl<T> NvSelect<T> {
         *self.current_param_index.read().unwrap()
     }
 
-    pub fn update_current_param_index(self: Arc<Self>, current_param_index: u32) {
+    pub fn update_current_param_index(&mut self, current_param_index: u32) {
         let mut write_guard = self.current_param_index.write().unwrap();
         *write_guard = current_param_index;
     }
@@ -266,11 +266,11 @@ impl<T> NvSelect<T> {
 
         // The locks are dropped here, avoiding deadlock
 
-        let parameter_values = self.parameter_values.read().unwrap().clone();
+        
         let current_param_index = *self.current_param_index.read().unwrap();
 
         let from = FromTableStatement::new(
-            parameter_values,
+            self.parameter_values.clone(),
             self.clone(),
             current_param_index,
             self.level,
@@ -288,7 +288,6 @@ impl<T> NvSelect<T> {
     }
 
     pub fn where_clause(self: Arc<Self>) -> Arc<WhereStatement<T>> {
-
         {
             let where_parent_guard = self.where_statement.write().unwrap();
 
@@ -303,7 +302,7 @@ impl<T> NvSelect<T> {
         // let current_param_index = *self.current_param_index.read().unwrap();
 
         let where_obj = WhereStatement::new_with_parent(
-            self.parameter_values.read().unwrap().clone(),
+            self.parameter_values.clone(),
             self.clone(),
             self.current_param_index.read().unwrap().clone(),
             self.level,
@@ -317,8 +316,6 @@ impl<T> NvSelect<T> {
         }
 
         where_clone
-
-        
     }
 
     // pub fn join(&mut self) -> &mut JoinStatement<T> {
@@ -386,7 +383,7 @@ impl<T> NvSelect<T> {
                 self.dialect,
                 fn_name,
                 parameter_list_format,
-                self.parameter_values.read().unwrap().clone(),
+                self.parameter_values.clone(),
                 param_values,
                 static_param_values,
                 self.current_param_index.read().unwrap().clone(),
@@ -517,8 +514,8 @@ impl<T> NvSelect<T> {
         query
     }
 
-    pub fn values(&self) -> Arc<Vec<T>> {
-        self.parameter_values.read().unwrap().clone()
+    pub fn values(&self) -> Arc<RwLock<Vec<T>>> {
+        self.parameter_values.clone()
     }
 }
 
