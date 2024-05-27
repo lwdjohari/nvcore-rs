@@ -464,9 +464,8 @@ impl<T> NvSelect<T> {
         if let Some(where_) = where_statement_guard.as_ref() {
             if pretty_print {
                 query.push_str(&format!(
-                    "\n{}WHERE\n{}{}",
+                    "\n{}WHERE\n{}",
                     indent_space(self.level),
-                    indent_space(self.level + 1),
                     where_.generate_query(pretty_print, false)
                 ));
             } else {

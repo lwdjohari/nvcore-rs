@@ -78,7 +78,7 @@ fn main() {
         )
         .end_where_block();
 
-    println!("SQL QUERY:\n {}\n", select.generate_query(true));
+    println!("\nSQL QUERY:\n\n {}\n", select.generate_query(true));
 
     println!("PARAMETER VALUES: {}", "");
 

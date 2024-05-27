@@ -2,6 +2,7 @@
 
 use crate::sqlbuilder::NvSelect;
 use crate::sqlbuilder::{determine_parameter_format, DatabaseDialect, LogicOperator, SqlOperator};
+use crate::utils::indent_space;
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -166,6 +167,7 @@ impl<T> Condition<T> {
             }
             ConditionMode::LogicalOperator => {
                 ss.push_str(&format!(" {} ", self.logic_operator));
+                
             }
             ConditionMode::Subquery => {
                 ss.push_str(&format!(
@@ -295,7 +297,14 @@ impl<T> WhereStatement<T> {
         let conditions_guard = self.conditions.read().unwrap();
 
         for c in conditions_guard.iter() {
+            if pretty_print && (c.mode == ConditionMode::Comparator || c.mode == ConditionMode::Subquery){
+                where_clause.push_str(&indent_space(self.level+1));
+            }
             where_clause.push_str(&c.generate_query(pretty_print));
+
+            if pretty_print && c.mode == ConditionMode::LogicalOperator{
+                where_clause.push_str(&format!("{}","\n"));
+            }
         }
 
         where_clause
