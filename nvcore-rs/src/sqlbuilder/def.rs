@@ -68,7 +68,7 @@ impl fmt::Display for SortType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq, Clone, Copy)]
 pub enum SqlOperator {
     Equal,
     NotEqual,

@@ -10,7 +10,6 @@ fn main() {
         .add_condition("cond1".to_string())
         .end_where();
 
-    println!("Select Index: {}", select.index());
-    
+    println!("Select Index: {}", select.index());    
     println!("Query: {}", select.generate_query());
 }

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::sqlbuilder::{DatabaseDialect, SqlAggregateFunction};
-use std::sync::Arc;
+use std::sync::Arc ;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum FieldDefMode {
@@ -14,20 +14,21 @@ pub enum FieldDefMode {
 impl std::fmt::Display for FieldDefMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FieldDefMode::FieldRaw => write!(f, "FieldRaw"),
-            FieldDefMode::FieldWType => write!(f, "FieldWType"),
-            FieldDefMode::FnStaticParameter => write!(f, "FnStaticParameter"),
-            FieldDefMode::FnParameterizedValues => write!(f, "FnParameterizedValues"),
+            FieldDefMode::FieldRaw => write!(f, "Field"),
+            FieldDefMode::FieldWType => write!(f, "Field [Strong-Typed]"),
+            FieldDefMode::FnStaticParameter => write!(f, "Fn Static"),
+            FieldDefMode::FnParameterizedValues => write!(f, "Fn Parameterized"),
         }
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct FieldDef<T> {
     field: String,
     table_alias: Option<String>,
-    static_param_values: Vec<String>,
+    static_param_values: Arc<Vec<String>>,
     parameter_values: Arc<Vec<T>>,
-    fn_values: Vec<T>,
+    fn_values: Arc<Vec<T>>,
     function_name: String,
     parameter_format: String,
     enclose_field_name: bool,
@@ -54,9 +55,9 @@ impl<T> FieldDef<T> {
         Self {
             field,
             table_alias,
-            static_param_values: Vec::new(),
+            static_param_values: Arc::new(Vec::new()),
             parameter_values: Arc::new(Vec::new()),
-            fn_values: Vec::new(),
+            fn_values: Arc::new(Vec::new()),
             function_name: String::new(),
             parameter_format: String::new(),
             enclose_field_name,
@@ -73,7 +74,7 @@ impl<T> FieldDef<T> {
     pub fn new_static_function(
         dialect: DatabaseDialect,
         function_name: String,
-        static_param_values: Vec<String>,
+        static_param_values: Arc<Vec<String>>,
         level: u32,
         alias: Option<String>,
     ) -> Self {
@@ -82,7 +83,7 @@ impl<T> FieldDef<T> {
             table_alias: None,
             static_param_values,
             parameter_values: Arc::new(Vec::new()),
-            fn_values: Vec::new(),
+            fn_values: Arc::new(Vec::new()),
             function_name,
             parameter_format: String::new(),
             enclose_field_name: false,
@@ -101,8 +102,8 @@ impl<T> FieldDef<T> {
         function_name: String,
         parameter_format: String,
         parameter_values: Arc<Vec<T>>,
-        fn_param_values: Vec<T>,
-        static_param_values: Vec<String>,
+        fn_param_values: Arc<Vec<T>>,
+        static_param_values: Arc<Vec<String>>,
         param_index: u32,
         level: u32,
         alias: Option<String>,
@@ -110,7 +111,7 @@ impl<T> FieldDef<T> {
         let current_parameter_index = Self::process_function_parameter_index(
             param_index,
             &parameter_format,
-            &fn_param_values
+            &fn_param_values,
         );
         Self {
             field: String::new(),
@@ -134,7 +135,7 @@ impl<T> FieldDef<T> {
     fn process_function_parameter_index(
         current_param_index: u32,
         parameter_format: &str,
-        parameter_values: &[T]
+        parameter_values: &[T],
     ) -> u32 {
         if parameter_format.is_empty() {
             return current_param_index;
@@ -278,8 +279,8 @@ impl<T> FieldDef<T> {
         &self.function_name
     }
 
-    pub fn static_parameter_values(&self) -> &Vec<String> {
-        &self.static_param_values
+    pub fn static_parameter_values(&self) -> Arc<Vec<String>> {
+        self.static_param_values.clone()
     }
 
     pub fn values(&self) -> Arc<Vec<T>> {

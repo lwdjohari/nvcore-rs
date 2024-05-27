@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use crate::sqlbuilder::{DatabaseDialect, NvSelect};
-use std::sync::Arc;
+use crate::utils::indent_space;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Clone)]
 pub struct FromTable {
@@ -32,91 +33,102 @@ impl FromTable {
     }
 }
 
-
 pub struct FromTableStatement<T> {
-    parent: Option<*mut NvSelect<T>>,
-    tables: Vec<FromTable>,
-    subqueries: Vec<NvSelect<T>>,
-    parameter_values: Arc<Vec<T>>,
+    parent: RwLock<Option<Arc<NvSelect<T>>>>,
+    tables: RwLock<Vec<FromTable>>,
+    subqueries: RwLock<Vec<Arc<NvSelect<T>>>>,
+    parameter_values: RwLock<Arc<Vec<T>>>,
+    current_parameter_index: RwLock<u32>,
     level: u32,
-    current_parameter_index: u32,
     dialect: DatabaseDialect,
 }
 
 impl<T> FromTableStatement<T> {
     pub fn new(
-        values: Arc<Vec<T>>,
-        parent: *mut NvSelect<T>,
+        parameter_values: Arc<Vec<T>>,
+        parent: Arc<NvSelect<T>>,
         parameter_index: u32,
         level: u32,
         dialect: DatabaseDialect,
-    ) -> Self {
-        Self {
-            parent: Some(parent),
-            tables: Vec::new(),
-            subqueries: Vec::new(),
-            parameter_values: values,
-            level,
-            current_parameter_index: parameter_index,
-            dialect,
-        }
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            parent: Some( parent).into(),
+            tables: Vec::new().into(),
+            subqueries: Vec::new().into(),
+            parameter_values:  parameter_values.into(),
+            level: level,
+            current_parameter_index: parameter_index.into(),
+            dialect: dialect,
+        })
     }
 
-    pub fn add_table(&mut self, table: FromTable) -> &mut Self {
-        self.tables.push(table);
-        self
+    pub fn add_table(self: Arc<Self>, table: FromTable) -> Arc<Self> {
+        let mut write_guard = self.tables.write().unwrap();
+        write_guard.push(table);
+        self.clone()
     }
 
     pub fn add_table_with_alias(
-        &mut self,
-        table_name: String,
-        table_alias: Option<String>,
-    ) -> &mut Self {
-        self.tables.push(FromTable::with_alias(table_name, table_alias));
-        self
+        self: Arc<Self>,
+        table_name: &String,
+        table_alias: &Option<String>,
+    ) -> Arc<Self> {
+        let mut write_guard = self.tables.write().unwrap();
+        write_guard.push(FromTable::with_alias(table_name.clone(), table_alias.clone()));
+        self.clone()
     }
 
     pub fn get_current_parameter_index(&self) -> u32 {
-        self.current_parameter_index
+        *self.current_parameter_index.read().unwrap()
     }
 
-    pub fn update_current_param_index(&mut self, param_index: u32) {
-        self.current_parameter_index = param_index;
+    pub fn update_current_param_index(self: Arc<Self>, param_index: u32) {
+        let mut index = self.current_parameter_index.write().unwrap();
+        *index = param_index;
     }
 
-    pub fn get_current_parameter_index_from_parent(&self, select: &NvSelect<T>) -> u32 {
-        select.get_current_param_index()
-    }
+    // pub fn get_current_parameter_index_from_parent(&self, select: &NvSelect<T>) -> u32 {
+    //     select.get_current_param_index()
+    // }
 
-    pub fn begin_subquery(&mut self, table_alias: String) -> &mut NvSelect<T> {
-        let index = self.current_parameter_index;
-        self.create_new_select_block(index, self.level + 1, table_alias);
-        self.subqueries.last_mut().unwrap()
+    pub fn begin_subquery(self:Arc<Self>, table_alias: String) -> Arc<NvSelect<T>> {
+        let index = *self.current_parameter_index.read().unwrap();
+        let level = self.level.clone();
+        self.create_new_select_block(index, level + 1, table_alias)
     }
-    
-    
-
 
     pub fn is_empty(&self) -> bool {
-        self.tables.is_empty()
+        self.tables.read().unwrap().is_empty()
     }
 
-    pub fn end_from_table_block(&mut self) -> &mut NvSelect<T> {
-        match self.parent {
-            Some(parent) => unsafe { &mut *parent },
-            None => panic!("EndFromTableBlock() null-reference to parent"),
+    pub fn end_from_table_block( self:Arc<Self>) -> Arc<NvSelect<T>> {
+        let parent_guard = self.parent.read().unwrap();
+        if parent_guard.is_none() {
+            panic!("EndFromTableBlock() null-reference to parent");
         }
+
+        // Cloning the Arc inside the Option
+        Arc::clone(parent_guard.as_ref().unwrap())
+         
     }
 
     pub fn generate_query(&self, pretty_print: bool) -> String {
         let mut query = String::new();
         let mut first_element = true;
-        for table in &self.tables {
+
+        let table_guard = self.tables.read().unwrap();
+        let sq_guard = self.subqueries.read().unwrap();
+        
+        let is_subqueries_empty = sq_guard.is_empty();
+
+        let indent_level = self.level.clone() +1;
+        let indentation = indent_space(indent_level.clone()); 
+        for table in table_guard.iter() {
             if !first_element {
                 query.push_str(if pretty_print { ",\n" } else { ", " });
             }
             query.push_str(if pretty_print {
-                 &self.generate_indentation(self.level + 1).clone()
+                &indentation
             } else {
                 ""
             });
@@ -124,14 +136,14 @@ impl<T> FromTableStatement<T> {
             first_element = false;
         }
 
-        if !self.subqueries.is_empty() {
-            for subquery in &self.subqueries {
+        if !is_subqueries_empty {
+            for subquery in sq_guard.iter() {
                 let alias = self.get_table_alias_from_parent(subquery);
                 if !first_element {
                     query.push_str(if pretty_print { ",\n" } else { ", " });
                 }
                 query.push_str(if pretty_print {
-                    &self.generate_indentation(self.level + 1)
+                    &indentation
                 } else {
                     ""
                 });
@@ -153,22 +165,23 @@ impl<T> FromTableStatement<T> {
         select.generate_query(false)
     }
 
-    
-
-    pub fn create_new_select_block(
-        &mut self,
-        index: u32,
-        level: u32,
-        table_alias: String,
-    ) {
-        self.subqueries.push(NvSelect::new_subquery_from(
-            self.parameter_values.clone(),
+     fn create_new_select_block( self:Arc<Self>, index: u32, level: u32, table_alias: String)->Arc<NvSelect<T>> {
+        let read_guard = self.parameter_values.read().unwrap();
+        let subquery = NvSelect::new_subquery_from(
+            read_guard.clone(),
             index,
             level,
-            self as *mut _,
+            self.clone(),
             table_alias,
-            self.dialect,
-        ));
+            self.dialect.clone(),
+        );
+
+        let subquery_to_return = subquery.clone();
+
+        let mut sq_guard = self.subqueries.write().unwrap();
+        sq_guard.push(subquery);
+
+        subquery_to_return
     }
 
     pub fn generate_select_query(&self, select: &NvSelect<T>, pretty_print: bool) -> String {
@@ -178,7 +191,5 @@ impl<T> FromTableStatement<T> {
     pub fn get_table_alias_from_parent(&self, select: &NvSelect<T>) -> String {
         select.table_alias().to_string()
     }
-    fn generate_indentation(&self, level: u32) -> String {
-        std::iter::repeat("  ").take(level as usize).collect::<String>().clone()
-    }
+    
 }
